@@ -1,0 +1,13 @@
+{
+  "name": "unclaude",
+  "owner": { "name": "sed1108", "url": "https://github.com/sed1108" },
+  "description": "unclaude — plain English for Claude Code, on screen and on the way out.",
+  "plugins": [
+    {
+      "name": "unclaude",
+      "source": "./",
+      "description": "A plain-English rewrite under each Claude Code answer, written by your own Claude subscription. Display-only. Ships /unclaude for text leaving the session.",
+      "category": "productivity"
+    }
+  ]
+}

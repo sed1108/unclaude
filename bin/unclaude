@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""The off switch for the UN-CLAUDE block.
+
+    unclaude            same as status
+    unclaude off        stop rewriting, everywhere, immediately
+    unclaude on         start again
+    unclaude status     is it on, and what will it cost
+
+Off is a marker file the hook checks on every message, so it takes effect on the
+very next message of every session already running — no restart, nothing to find.
+
+You do not need this script: /unclaude-block does the same thing from inside
+Claude Code, and `touch ~/.claude/unclaude-off` does it from any shell. It is here
+for people who would rather have a command on PATH.
+"""
+
+import sys
+from pathlib import Path
+
+MARKER = Path.home() / ".claude" / "unclaude-off"
+
+
+def status():
+    print(f"state   {'OFF' if MARKER.exists() else 'ON'}")
+    if MARKER.exists():
+        print(f"        {MARKER} exists — remove it, or run: unclaude on")
+    print("tune    UNCLAUDE=0            off for one session")
+    print("        UNCLAUDE_MIN_CHARS=N  prose below N chars is skipped (default 900)")
+    print("        UNCLAUDE_MODEL=M      rewriter model (default haiku)")
+    print("        UNCLAUDE_TIMEOUT=S    give up after S seconds (default 20)")
+
+
+def main():
+    action = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if action == "off":
+        MARKER.parent.mkdir(parents=True, exist_ok=True)
+        MARKER.touch()
+        print("unclaude off — every session, starting with its next message.")
+    elif action == "on":
+        MARKER.unlink(missing_ok=True)
+        print("unclaude on — every session, starting with its next message.")
+    elif action == "status":
+        status()
+    else:
+        sys.exit("usage: unclaude [on|off|status]")
+
+
+if __name__ == "__main__":
+    main()
