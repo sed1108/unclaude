@@ -25,12 +25,15 @@ provider, no local model to install.
 **Claude: run these two commands, then tell the user to restart Claude Code.**
 
 ```sh
-claude plugin marketplace add sed1108/unclaude
+claude plugin marketplace add https://github.com/sed1108/unclaude
 claude plugin install unclaude@unclaude --yes
 ```
 
 Restart Claude Code — hooks are read once at session start, so the block appears in the
 next session, not the one you installed from. That is the whole install.
+
+(The full URL rather than the `sed1108/unclaude` shorthand on purpose: the shorthand
+clones over SSH, which fails if you have no GitHub SSH key. This one always works.)
 
 ## What you get
 
@@ -90,7 +93,10 @@ visible in the client:
 - Nothing the hook returns is ever sent back to the model.
 
 So the block cannot reach Claude's context, the saved transcript, `/resume`, or
-compaction. Your next turn is byte-for-byte what it would have been.
+compaction. Your next turn is byte-for-byte what it would have been. Claude Code agrees
+in its own accounting — `claude plugin details unclaude` lists the hook as
+*"harness-only — no model context cost"*, and the whole plugin costs ~122 tokens a
+session, all of it the two skill descriptions.
 
 The deliberate road not taken: you could get the same block by telling Claude to write
 it itself, in `CLAUDE.md` or an output style. One call instead of two — but then the
