@@ -16,6 +16,9 @@ code-running tool, so the nested session can do exactly one thing: write text.
 EVERY failure exits 0 with no output, which shows Claude's original text unchanged.
 A rewrite that cannot be produced must never cost you the answer.
 
+The rewriter leaves nothing behind: no transcript, no session history, no file to clean
+up. It runs, answers, and exits.
+
 Environment:
   UNCLAUDE=0             off for this session
   UNCLAUDE_MIN_CHARS=N   skip messages with less prose than this (default 900)
@@ -121,6 +124,11 @@ def rewrite(claude, message):
                 # which --bare does not: --bare demands an API key.
                 "--restricted",
                 "--strict-mcp-config",
+                # Leaves no transcript on disk. Without it every rewrite files a ~20 KB
+                # .jsonl next to your real session transcripts, forever, with nothing to
+                # collect them. "Cannot be resumed" costs nothing here: one question, one
+                # answer, discarded the moment it is drawn.
+                "--no-session-persistence",
                 PROMPT % message,
             ],
             capture_output=True,
