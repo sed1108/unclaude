@@ -83,86 +83,91 @@ Post the summary to the ticket with /unclaude
 
 What gets posted:
 
-> Rewrote the rate limiter to use sliding window log with Redis backing; 12 new tests
-> pass, full suite is green.
+> Double-charging issue at checkout is fixed, all tests pass.
 >
-> The previous implementation used a fixed window algorithm, which has a known weakness: a
-> client can issue a full quota of requests immediately before the reset and another full
-> quota immediately after, allowing up to 2x the intended rate to slip through in a short
-> burst.
+> When checkout is slow to respond on poor connections, customers tap the "Pay now" button
+> multiple times, creating duplicate charges. The button gives no feedback while the
+> payment is in flight, making this the obvious thing to do.
 >
-> Changed the RateLimiter class in src/middleware/rate_limit.py to keep a timestamped log
-> of recent requests and count only those inside the trailing window, eliminating the
-> boundary problem.
+> 47 customers were charged twice for the same order over the last three months. Total
+> value of duplicate charges: £3,240. 19 of those were already refunded. 28 have not been
+> refunded and most haven't noticed yet.
 >
-> The previous implementation kept counters in process memory. Since the API runs on 4
-> pods behind the load balancer, each pod independently enforced the limit, making the
-> effective rate roughly 4x the configured rate. Added Redis-backed storage so all pods
-> share a single view of the counters, using the existing Redis connection pool.
+> Added duplicate-submission protection to the checkout flow. Each checkout attempt
+> generates a one-time key that travels with the payment request. If the same key arrives
+> twice, the second request returns the result of the first without creating a new charge.
 >
-> Wrote 12 new tests in tests/test_rate_limit.py covering basic allow/deny behaviour at
-> and around the limit, the boundary case that fixed-window failed on, concurrent access
-> from multiple simulated pods, Redis connection failure (fails open, doesn't take down
-> the API), and window expiry and log trimming. All tests pass and the full existing suite
-> is green.
+> The button is now disabled and labeled "Processing…" as soon as it's tapped. This
+> prevents the common case from reaching the server at all, though a page refresh would
+> bypass it.
 >
-> The burst_allowance config option is currently ignored by the new implementation.
-> Supporting it would require the config schema to change so that burst size and burst
-> window can be expressed independently. This touches shared config validation code that
-> other services depend on, so it's tracked separately as a follow-up.
+> Wrote 9 new tests covering duplicate submissions, distinct orders from the same customer,
+> retries after network failure, and button state during and after payment. All tests pass.
+> Full checkout suite is green.
+>
+> 28 customers are still owed refunds totalling roughly £1,900. The list of affected orders
+> is ready but needs sign-off before refunds are issued.
 
-Note what **survived**: every file path, the 4 pods, the 12 tests, the 2x and 4x rate
-leaks, and the unfinished `burst_allowance` — stated plainly instead of apologised for.
-Shortening is not the goal. Cutting words while keeping every fact is.
+Note what **survived**: the 47 customers, the £3,240, the 9 tests — and the 28 people still
+owed money, left as the last thing you read instead of buried under an apology. Shortening
+is not the goal. Cutting words while keeping every fact is.
 
 <details>
 <summary><b>What Claude would have posted</b> (click to expand)</summary>
 
-> All done! 🎉 I've gone ahead and completed the work on the rate limiter, and I'm happy to report that everything is passing. Here's a comprehensive summary of what I did and why.
+> All done! 🎉 I've gone ahead and fixed the double-charging issue on checkout, and I'm happy to report everything is passing. Here's a comprehensive summary of what I did and why.
 >
 > **Background**
 >
-> Before making any changes, I wanted to make sure I properly understood the existing implementation, so I spent some time reading through the current code. What I found was that the rate limiter was using a **fixed window** algorithm.
+> Before making any changes, I wanted to make sure I properly understood what was actually happening, so I spent some time going through the support tickets and the payment logs together.
 >
-> As you may already know, fixed window rate limiting has a well-documented weakness: because the counter resets at a hard boundary, a client can issue a full quota of requests immediately before the reset and another full quota immediately after. In the worst case this allows up to **2x the intended rate** to slip through in a short burst. Given that this limiter is protecting our public API, that seemed worth addressing properly rather than papering over.
+> What I found was that when the "Pay now" button is slow to respond — which happens on poor mobile connections — people quite reasonably tap it again. And because there was nothing stopping the second tap from going through as a separate request, they were being charged twice for the same order.
+>
+> I should say that this is entirely a product problem rather than a user error. The button gives no feedback while the payment is in flight, so tapping again is the obvious thing to do.
+>
+> **How big the problem was**
+>
+> I went back through the last three months of payment records to size it properly:
+>
+> - **47 customers** were charged twice for the same order
+> - Total value of the duplicate charges: **£3,240**
+> - **19 of those** had already contacted support about it and been refunded
+> - The remaining **28 have not been refunded**, and as far as I can tell most of them haven't noticed yet
 >
 > **What I changed**
 >
-> I've refactored the implementation to use a **sliding window log** approach instead. Here's a breakdown of the changes:
+> I've added duplicate-submission protection to the checkout flow. Here's how it works:
 >
-> **1. Core algorithm**
+> **1. The order gets a unique key**
 >
-> I rewrote the `RateLimiter` class in `src/middleware/rate_limit.py`. The new implementation keeps a timestamped log of recent requests and counts only those falling inside the trailing window, which eliminates the boundary problem entirely.
+> When the checkout page loads, it now generates a one-time key for that attempt and sends it with the payment request. If the same key arrives twice, the second request doesn't create a new charge — it just returns the result of the first one.
 >
-> **2. Shared state across pods**
+> **2. The button now says something**
 >
-> I also noticed — and I think this is worth flagging as a somewhat separate issue — that the previous implementation kept its counters **in process memory**. Since we run 4 API pods behind the load balancer, this meant each pod was independently enforcing the limit, so the effective rate was roughly 4x what was configured.
->
-> To address this, I've added Redis-backed storage so that all pods share a single view of the counters. I used the existing Redis connection pool rather than introducing a new dependency, so there's nothing new to configure or deploy.
+> I also disabled the button and changed the label to "Processing…" as soon as it's tapped. This won't prevent every case on its own, since a page refresh would get around it, but it means the common case never reaches the server at all.
 >
 > **3. Tests**
 >
-> I wrote **12 new tests** in `tests/test_rate_limit.py` covering:
+> I wrote **9 new tests** covering:
 >
-> - Basic allow/deny behaviour at and around the limit
-> - The boundary case that the old fixed-window implementation failed
-> - Concurrent access from multiple simulated pods
-> - Redis connection failure (fails open, so a Redis outage doesn't take down the API)
-> - Window expiry and log trimming
+> - The same key submitted twice returns one charge
+> - Two genuinely different orders from the same customer both go through
+> - A retry after a real network failure still succeeds
+> - The button state during and after payment
 >
-> All 12 pass, and I also ran the full existing suite to make sure nothing regressed — **the whole suite is green**.
+> All 9 pass, and I ran the full existing checkout suite as well — **everything is green**.
 >
 > **One thing I wasn't able to finish**
 >
-> I do want to be upfront about one item that I wasn't able to fully resolve.
+> I do want to be upfront about something I couldn't complete.
 >
-> The `burst_allowance` config option is currently **ignored** by the new implementation. Supporting it properly would require a change to the configuration schema — specifically, it would need to become a nested object rather than a scalar, so that the burst size and the burst window can be expressed independently.
+> The **28 outstanding refunds** still need to be issued. I've put together the list of affected orders, but I didn't want to trigger refunds automatically — that felt like it needed a human decision, and it probably needs Finance to sign off on it rather than being something I should do unilaterally.
 >
-> That felt like it was probably out of scope for this particular ticket, and it also touches the shared config validation code which other services depend on, so I didn't want to make that call unilaterally. I'd suggest we track it separately. Happy to pick it up as a follow-up if that would be helpful!
+> I'd suggest that gets tracked as its own piece of work. Happy to help with it if that would be useful!
 >
 > **Summary**
 >
-> To summarise: the rate limiter now uses a sliding window log backed by Redis, which fixes both the 2x boundary leak and the 4x multi-pod leak. 12 new tests, full suite green. The `burst_allowance` option is not yet wired up and will need a config schema change.
+> To summarise: double charges at checkout are now prevented, both at the button and at the payment endpoint. 9 new tests, full suite green. 28 customers are still owed refunds totalling roughly £1,900, and that list is ready but needs sign-off.
 >
 > Let me know if you have any questions about any of this, or if you'd like me to adjust the approach anywhere! Always happy to iterate. 😊
 
