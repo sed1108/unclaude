@@ -2,8 +2,9 @@
 
 Claude Code says a lot. This tells you what it actually said.
 
-Under each substantial answer you get a short plain-English version of it. And when you
-are about to paste something into a ticket or a review, `/unclaude` rewrites it first.
+Under each substantial answer you get a short plain-English version of it. And whenever
+you want it on purpose — posting a comment on a task, say — there is a `/unclaude` skill
+you can call.
 
 The rewrite is written by **your own Claude subscription** — no API key, no second
 provider, nothing to install and run locally.
