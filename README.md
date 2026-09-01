@@ -74,8 +74,8 @@ The threshold is tunable — see [Configuration](docs/configuration.md).
 
 ## `/unclaude`, for text on its way out
 
-For text that leaves the session. You did the work; now it has to go somewhere other
-people read.
+Same job, one step later. The change above got made — and now it has to go on the ticket,
+where people who were not in the session will read it.
 
 ```
 Post the summary to the ticket with /unclaude
@@ -83,91 +83,81 @@ Post the summary to the ticket with /unclaude
 
 What gets posted:
 
-> Double-charging issue at checkout is fixed, all tests pass.
+> Extended password reset expiry window from 15 minutes to 2 hours and added dashboard
+> visibility for expired-link attempts.
 >
-> When checkout is slow to respond on poor connections, customers tap the "Pay now" button
-> multiple times, creating duplicate charges. The button gives no feedback while the
-> payment is in flight, making this the obvious thing to do.
+> Over the last 30 days, 340 out of 4,200 password reset requests failed (about 8%), all
+> showing "This link has expired" even when clicked immediately. The reset link expired
+> after 15 minutes, but the email notification queue took up to 22 minutes to deliver at
+> weekday morning peak. Failures clustered between 08:45 and 10:15.
 >
-> 47 customers were charged twice for the same order over the last three months. Total
-> value of duplicate charges: £3,240. 19 of those were already refunded. 28 have not been
-> refunded and most haven't noticed yet.
+> Changed the reset expiry window from 15 minutes to 2 hours in settings/auth.py. This
+> duration is standard across most products.
 >
-> Added duplicate-submission protection to the checkout flow. Each checkout attempt
-> generates a one-time key that travels with the payment request. If the same key arrives
-> twice, the second request returns the result of the first without creating a new charge.
+> Added a counter for expired-link attempts to the existing dashboard. Previously this
+> required log digging to discover.
 >
-> The button is now disabled and labeled "Processing…" as soon as it's tapped. This
-> prevents the common case from reaching the server at all, though a page refresh would
-> bypass it.
+> Wrote 6 new tests in tests/test_password_reset.py: link used within window works, link
+> used after 2 hours is rejected, link used twice is rejected, and expired-link counter
+> increments correctly. All 6 passed. Full auth suite passed all tests.
 >
-> Wrote 9 new tests covering duplicate submissions, distinct orders from the same customer,
-> retries after network failure, and button state during and after payment. All tests pass.
-> Full checkout suite is green.
+> The notification queue remains slow at peak, and password reset emails are still queued
+> behind marketing sends. The proper fix is a priority lane for password resets, which
+> needs queue infrastructure work and should be tracked separately.
 >
-> 28 customers are still owed refunds totalling roughly £1,900. The list of affected orders
-> is ready but needs sign-off before refunds are issued.
+> The 340 affected customers who saw the expiry error have not been contacted. They would
+> succeed on retry, but no one has told them that. Created a list ready if Support wants
+> to reach out.
 
-Note what **survived**: the 47 customers, the £3,240, the 9 tests — and the 28 people still
-owed money, left as the last thing you read instead of buried under an apology. Shortening
-is not the goal. Cutting words while keeping every fact is.
+Note what **survived**: the 340 failures, the 08:45–10:15 window, the file paths, the 6
+tests — and both unfinished things, left as the last thing you read rather than buried
+under an apology. Shortening is not the goal. Cutting words while keeping every fact is.
 
 <details>
 <summary><b>What Claude would have posted</b> (click to expand)</summary>
 
-> All done! 🎉 I've gone ahead and fixed the double-charging issue on checkout, and I'm happy to report everything is passing. Here's a comprehensive summary of what I did and why.
+> All done! 🎉 I've gone ahead and made the password reset change we discussed, and I'm happy to report everything is passing. Here's a comprehensive summary of what I did and why.
 >
 > **Background**
 >
-> Before making any changes, I wanted to make sure I properly understood what was actually happening, so I spent some time going through the support tickets and the payment logs together.
+> Just to recap where we started: roughly one in twelve people who asked to reset their password couldn't complete it. Over the last 30 days that was 340 out of 4,200 requests — about 8% — and they were all seeing "This link has expired" even though they'd clicked the link the moment it landed in their inbox.
 >
-> What I found was that when the "Pay now" button is slow to respond — which happens on poor mobile connections — people quite reasonably tap it again. And because there was nothing stopping the second tap from going through as a separate request, they were being charged twice for the same order.
->
-> I should say that this is entirely a product problem rather than a user error. The button gives no feedback while the payment is in flight, so tapping again is the obvious thing to do.
->
-> **How big the problem was**
->
-> I went back through the last three months of payment records to size it properly:
->
-> - **47 customers** were charged twice for the same order
-> - Total value of the duplicate charges: **£3,240**
-> - **19 of those** had already contacted support about it and been refunded
-> - The remaining **28 have not been refunded**, and as far as I can tell most of them haven't noticed yet
+> As we established, the cause was a timing mismatch rather than a bug as such. The reset link was set to expire after 15 minutes, but the email sits on the notification queue first, and at the weekday morning peak that queue was taking up to 22 minutes to deliver. So the link was already dead on arrival, and the failures clustered almost entirely between 08:45 and 10:15.
 >
 > **What I changed**
 >
-> I've added duplicate-submission protection to the checkout flow. Here's how it works:
+> **1. The expiry window**
 >
-> **1. The order gets a unique key**
+> I've extended the reset window from 15 minutes to 2 hours. This is the one-line change in `settings/auth.py` we talked about, and 1-2 hours is well within what most products use.
 >
-> When the checkout page loads, it now generates a one-time key for that attempt and sends it with the payment request. If the same key arrives twice, the second request doesn't create a new charge — it just returns the result of the first one.
+> **2. Visibility**
 >
-> **2. The button now says something**
+> I also noticed — and I think this is worth flagging as a somewhat separate improvement — that we had no way of seeing this problem without going and looking for it. Nobody would have known the failure rate had crept up.
 >
-> I also disabled the button and changed the label to "Processing…" as soon as it's tapped. This won't prevent every case on its own, since a page refresh would get around it, but it means the common case never reaches the server at all.
+> So I've added a counter for expired-link attempts, which means the rate now shows up on the existing dashboard rather than needing someone to go digging through logs. If it climbs again, we'll see it.
 >
 > **3. Tests**
 >
-> I wrote **9 new tests** covering:
+> I wrote **6 new tests** in `tests/test_password_reset.py` covering:
 >
-> - The same key submitted twice returns one charge
-> - Two genuinely different orders from the same customer both go through
-> - A retry after a real network failure still succeeds
-> - The button state during and after payment
+> - A link used within the window works
+> - A link used after 2 hours is rejected
+> - A link that has already been used once is rejected the second time
+> - The expired-link counter increments correctly
 >
-> All 9 pass, and I ran the full existing checkout suite as well — **everything is green**.
+> All 6 pass, and I ran the full existing auth suite as well — **everything is green**.
 >
-> **One thing I wasn't able to finish**
+> **Two things I wasn't able to finish**
 >
-> I do want to be upfront about something I couldn't complete.
+> I do want to be upfront about a couple of items that are still outstanding.
 >
-> The **28 outstanding refunds** still need to be issued. I've put together the list of affected orders, but I didn't want to trigger refunds automatically — that felt like it needed a human decision, and it probably needs Finance to sign off on it rather than being something I should do unilaterally.
+> **The root cause is still there.** This change treats the symptom. The notification queue is still slow at peak, and password reset emails are still queued behind marketing sends. Giving them their own priority lane is the proper fix, but that's a few days of work and it really needs someone who knows the queue infrastructure to look at it properly. I'd suggest tracking that separately rather than folding it into this ticket.
 >
-> I'd suggest that gets tracked as its own piece of work. Happy to help with it if that would be useful!
+> **The 340 people who already failed haven't been told.** They tried to reset their password, were told the link had expired, and as far as I can tell most of them just gave up rather than trying again. They'd now succeed if they tried, but nobody has told them that. I didn't want to send anything to 340 customers on my own initiative — that felt like it needed a human decision, and probably wants Support to look at the wording. I've put the list together and it's ready if someone wants it.
 >
 > **Summary**
 >
-> To summarise: double charges at checkout are now prevented, both at the button and at the payment endpoint. 9 new tests, full suite green. 28 customers are still owed refunds totalling roughly £1,900, and that list is ready but needs sign-off.
+> To summarise: the reset window is now 2 hours instead of 15 minutes, and the expired-link rate is now visible on the dashboard. 6 new tests, full auth suite green. The queue delay that actually caused this is unfixed, and 340 affected customers have not been contacted.
 >
 > Let me know if you have any questions about any of this, or if you'd like me to adjust the approach anywhere! Always happy to iterate. 😊
 
