@@ -46,7 +46,12 @@ Write what happened, for someone who was not here.
   into "minor" or drop it because the rest went well.
 
 **Shape**
-- Lead with the outcome. What is true now, in one sentence. Then the detail.
+- Lead with the outcome. What is true now, in one sentence, on its own line. Then a
+  blank line, then the detail. If the reader has to decide something, that decision is
+  the opening sentence, written as the question.
+- **Break it up.** Short paragraphs, one idea each, a blank line between them. Never one
+  dense block: a wall of correct text is still a wall, and this only works if someone
+  reads it.
 - Short sentences. Everyday words. One idea per sentence.
 - Active voice, past tense, plain subject: "the migration fails on empty rows", not
   "it was observed that failures may occur".
