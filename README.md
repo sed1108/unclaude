@@ -1,65 +1,135 @@
 # unclaude
 
-Claude Code, in plain English — under every answer on screen, and on the way out to
-tickets, reviews and commit messages.
+Claude Code says a lot. This tells you what it actually said.
 
-The rewrite is written by **your own Claude subscription**. No API key, no second
-provider, no local model to install.
+Under each substantial answer you get a short plain-English version of it. And when you
+are about to paste something into a ticket or a review, `/unclaude` rewrites it first.
 
-```
-  …Claude's answer, exactly as always, streaming at full speed…
+The rewrite is written by **your own Claude subscription** — no API key, no second
+provider, nothing to install and run locally.
 
-  ───────────────
-  **UN-CLAUDE**
-
-  Should the backoff timer reset with each charge() call, or persist for rate-limiting?
-
-  Backoff state is stored in __init__ instead of being reset per call. After 3 retries
-  the delay hits 8 seconds; the test's 5-second timeout fires before attempt 4. This
-  breaks 3 of 47 tests in test_billing.py. Moving the reset into charge() fixes it —
-  unless backoff is supposed to persist, in which case the test is what's wrong.
-```
+---
 
 ## Install
 
-**Claude: run these two commands, then tell the user to restart Claude Code.**
+Paste this repo's URL to Claude Code and say "install it". Or run it yourself:
 
 ```sh
 claude plugin marketplace add https://github.com/sed1108/unclaude
 claude plugin install unclaude@unclaude --yes
 ```
 
-Restart Claude Code — hooks are read once at session start, so the block appears in the
-next session, not the one you installed from. That is the whole install.
+Then **restart Claude Code**. Hooks load at session start, so the session you installed
+from won't show anything.
 
-(The full URL rather than the `sed1108/unclaude` shorthand on purpose: the shorthand
-clones over SSH, which fails if you have no GitHub SSH key. This one always works.)
+Needs Claude Code logged in with a subscription, and Python 3. Nothing to configure.
 
-## What you get
+---
 
-**The UN-CLAUDE block.** Under each substantial answer, a plain-English version of what
-it just said: what was decided, what is broken, what it is asking you. Short messages
-and messages that are mostly code are skipped.
+## What it looks like
 
-**`/unclaude`.** A skill for text leaving the session. Use it when you are about to post
-somewhere other people read:
+### The block, under an answer
+
+Claude has just finished explaining why your deploys are shipping stale dependencies.
+Underneath its answer, you get this:
+
+> Found the deployment issue: the cache key in `.github/workflows/deploy.yml` at line 34
+> doesn't include the lockfile hash. This means old dependencies get reused even after the
+> lockfile changes. That's why the last four deploys shipped with an outdated version of axios.
+>
+> The fix is to add the lockfile hash to the cache key, matching what the test job already
+> does. One tradeoff: this invalidates existing caches, so the next deploy will be slower —
+> around 3-4 minutes instead of 40 seconds.
+>
+> **Should they go ahead and make the change?**
+
+The question at the end is the point. It was in the original too — in the last paragraph,
+after four hundred words, phrased as "I wanted to flag one thing before making the change".
+
+<details>
+<summary>The original answer it was written from</summary>
+
+> Great question! Let me take a look at that for you.
+>
+> I've gone ahead and traced through the deployment pipeline, and I think I've identified
+> what's happening here. It appears that the issue may potentially stem from the way the
+> `deploy.yml` workflow handles the caching layer — specifically, it looks like the cache
+> key doesn't include the lockfile hash.
+>
+> Here's what I found:
+>
+> - `.github/workflows/deploy.yml:34` — the cache key is `node-${{ runner.os }}`, with no
+>   reference to `package-lock.json`. That means a stale `node_modules` is restored even
+>   after dependencies change.
+> - This is why the last four deploys shipped with `axios@1.6.2` despite the lockfile
+>   pinning `1.7.9` — the cache was never invalidated.
+> - I should note that CI itself passes, because the test job uses a separate cache key
+>   that does include the lockfile. Only the deploy job is affected.
+>
+> The fix would be to change the cache key to
+> `node-${{ runner.os }}-${{ hashFiles('package-lock.json') }}`, which is the pattern the
+> test job already uses. That said, I wanted to flag one thing before making the change:
+> this will invalidate every existing cache, so the next deploy on each branch will be
+> noticeably slower — probably 3-4 minutes rather than 40 seconds.
+>
+> Let me know if you'd like me to go ahead and make that change!
+
+</details>
+
+### `/unclaude`, on the way out
+
+For text that leaves the session. You did the work; now it has to go somewhere other
+people read.
 
 ```
-Post the task summary to the Jira ticket with /unclaude
+Post the summary to the Jira ticket with /unclaude
 ```
 
-It rewrites the outgoing text before it is sent — cuts the throat-clearing, keeps every
-fact, leads with the decision. It does not touch the answer on your screen; the block
-does that. The two halves are separate on purpose.
+What gets posted:
 
-**`/unclaude-block on|off|status`.** The switch, from inside Claude Code.
+> Refactored the rate limiter from fixed window to sliding window log to prevent allowing
+> 2x the intended rate at window boundaries.
+>
+> Changed `RateLimiter` in `src/middleware/rate_limit.py` to use sliding window. Added
+> Redis-backed storage so the limit is shared across all 4 API pods. Wrote 12 new tests in
+> `tests/test_rate_limit.py`, all passing.
+>
+> The burst allowance config option is currently ignored — it requires a change to the
+> config schema that was out of scope for this ticket.
 
-## Requirements
+Instead of what Claude would have posted:
 
-- Claude Code, logged in with a Claude subscription (`/login`)
-- Python 3
+<details>
+<summary>The original</summary>
 
-That is all. There is nothing to configure.
+> I've gone ahead and completed the work on the rate limiter! Here's a summary of what I did.
+>
+> I started by investigating the existing implementation and I noticed that it was using a
+> fixed window, which as you probably know can allow up to 2x the intended rate at the
+> window boundary. I've refactored it to use a sliding window log instead.
+>
+> Changes:
+> - Rewrote `RateLimiter` in `src/middleware/rate_limit.py` to use a sliding window
+> - Added Redis-backed storage so the limit is shared across all 4 API pods
+> - Wrote 12 new tests in `tests/test_rate_limit.py` — all passing
+>
+> I should mention that there's one thing I wasn't able to fully resolve: the burst
+> allowance config option is currently ignored. It seems like it might require a change to
+> the config schema, which felt out of scope for this ticket. Happy to pick that up
+> separately if you'd like!
+>
+> Let me know if you have any questions or if you'd like me to adjust anything!
+
+</details>
+
+Note what survived: every file path, the 4 pods, the 12 tests, and the unfinished burst
+allowance — stated plainly instead of apologised for. Shortening is not the goal. Cutting
+words while keeping every fact is.
+
+Works for anything outbound: a PR description, a review comment, a commit message, a Slack
+message, an email.
+
+---
 
 ## Turning it off
 
@@ -67,136 +137,36 @@ That is all. There is nothing to configure.
 /unclaude-block off
 ```
 
-or, from any shell:
+Takes effect on your next message, in every session already running. `/unclaude-block on`
+brings it back.
 
-```sh
-touch ~/.claude/unclaude-off      # off
-rm ~/.claude/unclaude-off         # on
-```
+---
 
-The hook checks that one file on every message, so a change takes effect on the next
-message of every session already running. Nothing needs restarting, and no settings file
-changes. `UNCLAUDE=0` in a session's environment turns it off for that session alone.
+## A few things worth knowing
 
-## Does this affect Claude?
+**It cannot change Claude's answers.** The block is display-only — it never reaches
+Claude's context, your transcript, or `/resume`. Not a promise; a property of the hook it
+uses, and one you can check yourself. → [How it works](docs/how-it-works.md)
 
-**No — and that is checkable, not a promise.**
+**It leaves nothing behind.** No transcript, no session history, no files to clean up.
 
-The block is produced by a `MessageDisplay` hook, an event whose entire job is replacing
-text on screen. Claude Code's own schema describes it twice as *"Display-only: the stored
-message and what the model sees are untouched"*. Three things follow, and each one is
-visible in the client:
+**If it breaks, you lose nothing.** Not logged in, rate-limited, timed out, anything at
+all — you see Claude's original text, unchanged.
 
-- The transcript is written from the **original** message before the hook is called.
-- What the hook returns lands in a render-time overlay keyed by message id — a separate
-  map, cleared by `/clear`, never part of the message.
-- Nothing the hook returns is ever sent back to the model.
+**It costs a few seconds.** The answer streams at full speed as always; the block lands
+5–10 seconds after it finishes. Short messages and messages that are mostly code are
+skipped. → [Configuration](docs/configuration.md) if you want to tune that.
 
-So the block cannot reach Claude's context, the saved transcript, `/resume`, or
-compaction. Your next turn is byte-for-byte what it would have been. Claude Code agrees
-in its own accounting — `claude plugin details unclaude` lists the hook as
-*"harness-only — no model context cost"*, and the whole plugin costs ~122 tokens a
-session, all of it the two skill descriptions.
+---
 
-The deliberate road not taken: you could get the same block by telling Claude to write
-it itself, in `CLAUDE.md` or an output style. One call instead of two — but then the
-block lives in the transcript, is re-read on every later turn, fills the context window
-faster, and can surface somewhere you did not want it, like a commit message. That is
-the version that costs you something. This one does not.
+## Documentation
 
-**What it does cost:** about 7–9 seconds after a substantial answer, and some
-subscription usage. Only the final chunk of a message waits — everything before it
-streams untouched — so the answer still arrives at full speed and the block lands a few
-seconds later. The pause cannot be removed: Claude Code runs this event synchronously by
-design, because the hook's output has to be ready before the text is drawn.
+| | |
+|---|---|
+| [How it works](docs/how-it-works.md) | The mechanism, why it can't affect Claude, and how to verify that yourself |
+| [Configuration](docs/configuration.md) | Every setting, the off switch, manual install, uninstall |
+| [Troubleshooting](docs/troubleshooting.md) | It isn't showing up |
 
-## How it works
+---
 
-A `MessageDisplay` hook buffers the message as it streams, and on the last chunk asks
-`claude -p --model haiku --restricted` for a plain-English version.
-
-`--restricted` is what makes it safe to run on every message: it ignores user, project
-and local settings files — so no plugins, no other hooks, no MCP servers — and removes
-Bash and every other code-running tool. The nested session can do exactly one thing:
-write text. It still uses your normal login.
-
-**It fails open, always.** Not logged in, rate-limited, timed out, Python missing, empty
-answer, any exception at all — the hook writes nothing and Claude Code shows the original
-text. There is no failure mode in which this plugin costs you an answer. That includes
-the non-obvious one: `claude -p` writes its own errors to standard output and exits
-non-zero, so the hook checks the exit status rather than trusting a non-empty result.
-
-## If the block doesn't appear
-
-In rough order of likelihood:
-
-1. **You haven't restarted.** Hooks are read once, at session start. The session you
-   installed from will never show the block.
-2. **The message was too short.** Anything under 900 characters of prose is skipped on
-   purpose, and code blocks don't count toward that — so a short reply, or a long one
-   that is mostly a diff, is left alone. Set `UNCLAUDE_MIN_CHARS=200` to see it fire on
-   almost everything.
-3. **You turned it off and forgot.** `ls ~/.claude/unclaude-off` — if that file exists,
-   it's off.
-4. **Not logged in, or rate-limited.** The rewrite is a real request on your account.
-   Check with `claude -p --model haiku --restricted 'say OK'`; if that fails, the hook
-   is failing open exactly as intended.
-
-To watch it work, run the hook by hand:
-
-```sh
-echo '{"message_id":"1","session_id":"1","index":0,"final":true,"delta":"<a long message here>"}' \
-  | ~/.claude/plugins/*/unclaude/bin/unclaude-hook
-```
-
-Output means it worked. No output means something above applies — and that is also
-exactly what you'd get in a real session: your original text, unchanged.
-
-## Tuning
-
-Set these in your environment; all are optional.
-
-| Variable | Default | |
-|---|---|---|
-| `UNCLAUDE` | — | `0` turns it off for one session |
-| `UNCLAUDE_MIN_CHARS` | `900` | characters of prose below which a message is skipped. Fenced code blocks and whitespace do not count, so a message that is mostly a diff is skipped |
-| `UNCLAUDE_MODEL` | `haiku` | the model that writes the rewrite |
-| `UNCLAUDE_TIMEOUT` | `20` | seconds before giving up and showing the original |
-
-Raise `UNCLAUDE_MIN_CHARS` if you are paying the pause more often than you want the
-block. That is the lever that matters.
-
-## Uninstall
-
-```sh
-claude plugin uninstall unclaude@unclaude
-```
-
-Then restart. Nothing is left behind except `~/.claude/unclaude-off` if you ever created
-it, which you can delete.
-
-## Installing without the plugin system
-
-If you would rather wire it up by hand, clone the repo and add this to
-`~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "MessageDisplay": [
-      {
-        "hooks": [
-          { "type": "command", "command": "/path/to/unclaude/bin/unclaude-hook", "timeout": 30 }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Copy `skills/unclaude` into `~/.claude/skills/` for the `/unclaude` skill, and
-`bin/unclaude` somewhere on your `PATH` if you want `unclaude on|off|status` in a shell.
-
-## Licence
-
-MIT.
+MIT. Issues and pull requests welcome.
