@@ -126,6 +126,32 @@ text. There is no failure mode in which this plugin costs you an answer. That in
 the non-obvious one: `claude -p` writes its own errors to standard output and exits
 non-zero, so the hook checks the exit status rather than trusting a non-empty result.
 
+## If the block doesn't appear
+
+In rough order of likelihood:
+
+1. **You haven't restarted.** Hooks are read once, at session start. The session you
+   installed from will never show the block.
+2. **The message was too short.** Anything under 900 characters of prose is skipped on
+   purpose, and code blocks don't count toward that — so a short reply, or a long one
+   that is mostly a diff, is left alone. Set `UNCLAUDE_MIN_CHARS=200` to see it fire on
+   almost everything.
+3. **You turned it off and forgot.** `ls ~/.claude/unclaude-off` — if that file exists,
+   it's off.
+4. **Not logged in, or rate-limited.** The rewrite is a real request on your account.
+   Check with `claude -p --model haiku --restricted 'say OK'`; if that fails, the hook
+   is failing open exactly as intended.
+
+To watch it work, run the hook by hand:
+
+```sh
+echo '{"message_id":"1","session_id":"1","index":0,"final":true,"delta":"<a long message here>"}' \
+  | ~/.claude/plugins/*/unclaude/bin/unclaude-hook
+```
+
+Output means it worked. No output means something above applies — and that is also
+exactly what you'd get in a real session: your original text, unchanged.
+
 ## Tuning
 
 Set these in your environment; all are optional.
