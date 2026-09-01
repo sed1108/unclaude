@@ -36,7 +36,7 @@ All optional, all environment variables.
 | `UNCLAUDE` | — | `0` turns it off for this session |
 | `UNCLAUDE_MIN_CHARS` | `900` | Messages with less prose than this are skipped |
 | `UNCLAUDE_MODEL` | `haiku` | The model that writes the rewrite |
-| `UNCLAUDE_TIMEOUT` | `20` | Seconds before giving up and showing the original |
+| `UNCLAUDE_TIMEOUT` | `25` | Seconds before giving up and showing the original |
 
 ### `UNCLAUDE_MIN_CHARS` is the one that matters
 

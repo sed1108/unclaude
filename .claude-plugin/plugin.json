@@ -1,7 +1,7 @@
 {
   "name": "unclaude",
   "description": "A plain-English rewrite under each Claude Code answer, written by your own Claude subscription. Display-only: it cannot touch Claude's context, the transcript, or the answer itself. Ships /unclaude, a skill that rewrites text on its way out to a ticket, a review, or a commit message.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": { "name": "sed1108", "url": "https://github.com/sed1108" },
   "homepage": "https://github.com/sed1108/unclaude#readme",
   "repository": "https://github.com/sed1108/unclaude",

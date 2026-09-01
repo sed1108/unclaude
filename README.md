@@ -57,123 +57,28 @@ Needs Claude Code logged in with a subscription, and Python 3. Nothing to config
 Worth knowing before you install, because it is the one thing you will notice.
 
 Claude's answer streams at full speed exactly as it always has. The block then appears
-underneath it a few seconds later — **usually 5–10 seconds** (7–9s measured on typical
-answers), because a second, small model has to read the finished answer and write the
-rewrite.
+underneath it — **usually 8–15 seconds later**, because a second, small model has to read
+the finished answer and write the rewrite. It is faster when Anthropic's API is quiet
+(7–9s) and slower when it is busy; 20s+ happens.
 
-So you read the answer, and the plain-English version lands shortly after. Nothing is
-held back while it thinks.
+So you read the answer, and the plain-English version lands shortly after. Nothing is held
+back while it thinks.
+
+If the rewrite takes longer than 25 seconds it is abandoned and Claude's original text
+stands on its own. You lose the block, never the answer.
 
 Short messages and messages that are mostly code are skipped entirely, and cost nothing.
 The threshold is tunable — see [Configuration](docs/configuration.md).
 
 ---
 
-## What it looks like
-
-### The block, under an answer
-
-Claude has just spent 707 words explaining why your deploys ship stale dependencies.
-Underneath, you get this:
-
-> Should I fix the deploy cache key? The problem: stale dependencies have shipped to
-> production for at least four deploys because the cache key in deploy.yml is missing the
-> lockfile hash. It's just `node-${{ runner.os }}`, so every deploy restores months-old
-> node_modules instead of installing fresh ones. Example: axios@1.6.2 shipped instead of
-> the pinned 1.7.9. The fix is a one-line change to match what test.yml already does: add
-> the lockfile hash to the cache key. Trade-off: the next deploy on each branch will be
-> slow (3-4 minutes instead of 40 seconds) because it invalidates the old cache, but only
-> happens once per branch. After that, performance returns to normal.
-
-The question at the front is the point. It was in the original too — six hundred words
-down, phrased as "I did want to check in with you before making this change".
-
-<details>
-<summary><b>The 707-word original it was written from</b> (click to expand)</summary>
-
-> Great question! Let me dig into this properly for you — this is exactly the kind of thing that's worth getting to the bottom of.
->
-> **Investigating the deployment pipeline**
->
-> I've gone ahead and traced through the full deployment flow to understand what might be happening here. Let me walk you through what I found, step by step.
->
-> First, I took a look at the workflow definitions in `.github/workflows/` to get a sense of how the pipeline is structured. There are three workflows in play:
->
-> | Workflow | Trigger | Purpose |
-> |---|---|---|
-> | `test.yml` | pull_request | Runs the test suite |
-> | `deploy.yml` | push to main | Builds and deploys |
-> | `nightly.yml` | schedule | Dependency audit |
->
-> After reviewing each of these, I believe I've identified what appears to be the root cause of the behaviour you're seeing.
->
-> **What I found**
->
-> It looks like the issue may potentially stem from the way the `deploy.yml` workflow handles its caching layer. Specifically, I noticed that the cache key doesn't appear to include a hash of the lockfile:
->
-> ```yaml
-> - uses: actions/cache@v4
->   with:
->     path: node_modules
->     key: node-${{ runner.os }}
-> ```
->
-> As you can probably see, the key here is just `node-${{ runner.os }}`, which evaluates to something like `node-Linux` on every single run. There's no reference to `package-lock.json` anywhere in it.
->
-> **Why this matters:** GitHub Actions restores a cache whenever the key matches an existing entry. Since this key never changes, the very first `node_modules` that was ever cached — which could be months old at this point — gets restored on every deploy, regardless of what the lockfile actually says.
->
-> **Confirming the hypothesis**
->
-> To make sure I wasn't jumping to conclusions, I cross-referenced this against the actual deploy logs. Here's what I observed:
->
-> - The last four deploys all shipped with `axios@1.6.2` in the bundle
-> - However, `package-lock.json` has pinned `axios@1.7.9` since the dependency bump in #2841
-> - The cache restore step reports `Cache restored from key: node-Linux` on all four runs
-> - No `npm ci` re-install was triggered, because `node_modules` already existed
->
-> So the evidence does seem to line up with the hypothesis fairly conclusively.
->
-> I should also note — and I think this is important context — that CI itself passes without any issues. This is because `test.yml` uses a completely separate cache key that *does* include the lockfile hash:
->
-> ```yaml
-> key: node-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-> ```
->
-> That's why this hasn't been caught by the test suite. Only the deploy job is affected, which is arguably the worst possible place for it to happen.
->
-> **Proposed fix**
->
-> The fix would be to bring `deploy.yml` in line with what `test.yml` is already doing:
->
-> ```yaml
-> key: node-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-> ```
->
-> This is a one-line change and it follows the pattern that's already established elsewhere in the repository, so there shouldn't be any surprises in terms of maintainability.
->
-> **One thing to flag before I proceed**
->
-> That said, I did want to check in with you before making this change, because there's a trade-off worth being aware of.
->
-> Changing the cache key will invalidate every existing cache entry. What that means in practice is that the next deploy on each branch will need to do a full `npm ci` from scratch rather than restoring from cache. Based on the timings I'm seeing in the logs, that's likely to take somewhere in the region of 3-4 minutes, as opposed to the roughly 40 seconds it currently takes.
->
-> This is a one-time cost per branch, and after that first run the cache will be warm again and things should return to normal. But if you have a release going out today, it might be worth timing the change around that.
->
-> **Summary**
->
-> To summarise where things stand: the deploy cache key is missing the lockfile hash, which means stale dependencies have been shipping to production for at least the last four deploys. The fix is a one-line change matching the existing pattern in `test.yml`, with a one-off slower deploy per branch as the cost.
->
-> Let me know if you'd like me to go ahead and make that change, or if you'd prefer to handle the timing differently! Happy to help either way.
-
-</details>
-
-### `/unclaude`, on the way out
+## `/unclaude`, for text on its way out
 
 For text that leaves the session. You did the work; now it has to go somewhere other
 people read.
 
 ```
-Post the summary to the Jira ticket with /unclaude
+Post the summary to the ticket with /unclaude
 ```
 
 What gets posted:
